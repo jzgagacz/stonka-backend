@@ -8,20 +8,23 @@ function executequery(pool, q, v) {
 
 function createdb(pool) {
     let v = []
-    let q = `
-    CREATE TABLE IF NOT EXISTS users (
-	    username VARCHAR(100) NOT NULL PRIMARY KEY
-    );`
-    executequery(pool, q, []);
-
-    v = ['user1']
-    q = 'INSERT INTO users(username) VALUES($1) ON CONFLICT (username) DO NOTHING'
-    executequery(pool, q, v);
+    let q = ''
 
     q = `
     CREATE TABLE IF NOT EXISTS subscriptions (
-	    username VARCHAR(100) NOT NULL PRIMARY KEY REFERENCES users,
-        sub JSONB
+        id SERIAL PRIMARY KEY,
+	    userid VARCHAR(100) NOT NULL,
+        sub JSONB NOT NULL
+    );`
+    executequery(pool, q, []);
+    q = `
+    CREATE TABLE IF NOT EXISTS alerts (
+        id SERIAL PRIMARY KEY,
+	    userid VARCHAR(100) NOT NULL,
+        crypto VARCHAR(8) NOT NULL,
+        price INTEGER NOT NULL,
+        moreless VARCHAR(8) NOT NULL,
+        date BIGINT NOT NULL
     );`
     executequery(pool, q, []);
 }
