@@ -7,6 +7,7 @@ const { parse } = require('pg-connection-string');
 const { response } = require("express");
 const jwt = require('express-jwt');
 const jwksRsa = require('jwks-rsa');
+const format = require('pg-format');
 
 
 const createdb = require('./createdb.js');
@@ -48,7 +49,7 @@ const checkJwt = jwt({
     algorithms: ['RS256']
 });
 
-const alertTimeout = 1000*10
+const alertTimeout = 1000 * 60
 async function manageAlerts() {
     console.log('querying alerts')
     const alerts = await pool.query('SELECT * FROM alerts')
@@ -137,14 +138,84 @@ app.post('/api/subscribe', checkJwt, async (req, res) => {
 })
 
 app.post('/api/alert', checkJwt, async (req, res) => {
-    console.log('got alert')
     const alert = req.body;
     const username = req.user.sub
     const result = await pool.query('INSERT INTO alerts(userid, crypto, price, moreless, date) VALUES($1, $2, $3, $4, $5) RETURNING id', [username, alert.crypto, alert.price, alert.moreless, alert.date])
-    res.status(201).json({id: result.rows[0].id})
+    res.status(201).json({ id: result.rows[0].id })
+});
+
+//TODO
+app.post('/api/followed', checkJwt, async (req, res) => {
+    const followed = req.body;
+    const username = req.user.sub
+    await pool.query('INSERT INTO followed(userid, symbol) VALUES($1, $2)', [username, followed.symbol])
+    res.status(201).json({})
+});
+
+//TODO
+app.delete('/api/followed', checkJwt, async (req, res) => {
+    const followed = req.body;
+    const username = req.user.sub
+    const result = await pool.query('DELETE FROM followed WHERE userid = $1 AND symbol = $2', [username, followed.symbol])
+    res.status(201).json({})
+});
+
+app.get('/api/user/followed', checkJwt, async (req, res) => {
+    const username = req.user.sub
+    const result = await pool.query('SELECT * FROM followed WHERE userid = $1', [username])
+    let followed = result.rows.map((row) => row.symbol)
+    res.status(201).json(followed)
+});
+
+app.post('/api/user/followed', checkJwt, async (req, res) => {
+    const followed = req.body;
+    const username = req.user.sub
+    let vals = followed.map((symbol) => [username, symbol])
+    const client = await pool.connect()
+    try {
+        await client.query('BEGIN')
+        await client.query('DELETE FROM followed WHERE userid = $1', [username])
+        await client.query(format('INSERT INTO followed(userid, symbol) VALUES %L', vals))
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    res.status(201).json({})
+});
+
+//TODO
+app.post('/api/settings', checkJwt, async (req, res) => {
+    const followed = req.body;
+    const username = req.user.sub
+    await pool.query('INSERT INTO followed(userid, symbol) VALUES($1, $2)', [username, followed.symbol])
+    res.status(201).json({})
+});
+
+app.delete('/api/settings', checkJwt, async (req, res) => {
+    const followed = req.body;
+    const username = req.user.sub
+    const result = await pool.query('DELETE FROM followed WHERE userid = $1 AND symbol = $2', [username, followed.symbol])
+    res.status(201).json({})
+});
+
+app.get('/api/user/settings', checkJwt, async (req, res) => {
+    const username = req.user.sub
+    const result = await pool.query('SELECT * FROM settings WHERE userid = $1', [username])
+    const settings = result.rows[0] === undefined ? [] : result.rows[0] 
+    res.status(201).json(settings)
+});
+
+app.post('/api/user/settings', checkJwt, async (req, res) => {
+    const settings = req.body;
+    const username = req.user.sub
+    await pool.query('INSERT INTO settings(userid, chartColor) VALUES($1, $2) ON CONFLICT (userid) DO UPDATE SET chartColor = EXCLUDED.chartColor', [username, settings.chartColor])
+    res.status(201).json({})
 });
 
 app.listen(PORT, () => {
     console.log(`Server listening on ${PORT}`);
-    setTimeout(manageAlerts,alertTimeout)
+    setTimeout(manageAlerts, alertTimeout)
 });

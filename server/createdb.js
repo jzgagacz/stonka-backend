@@ -17,6 +17,7 @@ function createdb(pool) {
         sub JSONB NOT NULL
     );`
     executequery(pool, q, []);
+
     q = `
     CREATE TABLE IF NOT EXISTS alerts (
         id SERIAL PRIMARY KEY,
@@ -25,6 +26,21 @@ function createdb(pool) {
         price INTEGER NOT NULL,
         moreless VARCHAR(8) NOT NULL,
         date BIGINT NOT NULL
+    );`
+    executequery(pool, q, []);
+
+    q = `
+    CREATE TABLE IF NOT EXISTS followed (
+	    userid VARCHAR(100) NOT NULL,
+        symbol VARCHAR(8) NOT NULL,
+        PRIMARY KEY (userid, symbol)
+    );`
+    executequery(pool, q, []);
+
+    q = `
+    CREATE TABLE IF NOT EXISTS settings (
+	    userid VARCHAR(100) PRIMARY KEY NOT NULL,
+        chartColor VARCHAR(16) NOT NULL
     );`
     executequery(pool, q, []);
 }
