@@ -40,7 +40,16 @@ function createdb(pool) {
     q = `
     CREATE TABLE IF NOT EXISTS settings (
 	    userid VARCHAR(100) PRIMARY KEY NOT NULL,
-        chartColor VARCHAR(16) NOT NULL
+        chartColor VARCHAR(16)
+    );`
+    executequery(pool, q, []);
+
+    q = `
+    CREATE TABLE IF NOT EXISTS timestamps (
+	    userid VARCHAR(100) PRIMARY KEY NOT NULL,
+        followed BIGINT,
+        alerts BIGINT,
+        settings BIGINT
     );`
     executequery(pool, q, []);
 }
