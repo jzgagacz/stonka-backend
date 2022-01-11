@@ -20,10 +20,17 @@ const PRIVATE_VAPID_KEY = process.env.PRIVATE_VAPID_KEY;
 const DATABASE_URL = process.env.DATABASE_URL;
 const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
+const DB_SSL = process.env.DB_SSL
 
 webpush.setVapidDetails(`mailto:${process.env.WEBPUSH_EMAIL}`, PUBLIC_VAPID_KEY, PRIVATE_VAPID_KEY);
 
-const dbconfig = parse(DATABASE_URL)
+let dbconfig = parse(DATABASE_URL)
+if (DB_SSL === 'true') {
+    dbconfig['ssl'] = {
+        rejectUnauthorized: false
+    }
+}
+console.log(dbconfig)
 const pool = new Pool(
     dbconfig
 )
