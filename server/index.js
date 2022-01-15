@@ -56,44 +56,47 @@ const checkJwt = jwt({
     algorithms: ['RS256']
 });
 
-const alertTimeout = 1000 * 30
+const alertTimeout = 1000 * 60
 async function manageAlerts() {
     console.log('querying alerts')
-    const alerts = await pool.query('SELECT * FROM alerts')
-    for (const row of alerts.rows) {
-        console.log('alert: ', row.id)
-        const crypto = row.crypto
-        const price = row.price
-        const moreless = row.moreless
-        const date = row.date
+    const cryptos = await pool.query('SELECT DISTINCT crypto FROM alerts')
+    for (const c of cryptos.rows) {
+        const crypto = c.crypto
         const url = `https://www.alphavantage.co/query?function=CRYPTO_INTRADAY&symbol=${crypto}&market=USD&interval=1min&outputsize=full&apikey=${API_KEY}`
         const response = await fetch(url)
         const data = await response.json()
-        let send = false
-        if (moreless === "more") {
-            for (const t in data["Time Series Crypto (1min)"]) {
-                if (data["Time Series Crypto (1min)"][t]["4. close"] > price && Date.parse(t + "+0000") > date) {
-                    send = true;
-                    break;
+
+        const alerts = await pool.query('SELECT * FROM alerts WHERE crypto = $1')
+        for (const row of alerts.rows) {
+            const price = row.price
+            const moreless = row.moreless
+            const date = row.date
+            let send = false
+            if (moreless === "more") {
+                for (const t in data["Time Series Crypto (1min)"]) {
+                    if (data["Time Series Crypto (1min)"][t]["4. close"] > price && Date.parse(t + "+0000") > date) {
+                        send = true;
+                        break;
+                    }
+                }
+            } else {
+                for (const t in data["Time Series Crypto (1min)"]) {
+                    if (data["Time Series Crypto (1min)"][t]["4. close"] < price && Date.parse(t + "+0000") > date) {
+                        send = true;
+                        break;
+                    }
                 }
             }
-        } else {
-            for (const t in data["Time Series Crypto (1min)"]) {
-                if (data["Time Series Crypto (1min)"][t]["4. close"] < price && Date.parse(t + "+0000") > date) {
-                    send = true;
-                    break;
+            if (send) {
+                const userid = row.userid
+                const resp = await pool.query('SELECT * FROM subscriptions WHERE userid = $1', [userid])
+                for (const s of resp.rows) {
+                    const subscription = s.sub
+                    const payload = JSON.stringify({ title: 'Alert cenowy', body: `Cena kryptowaluty ${crypto} jest ${moreless === 'more' ? 'powyżej' : 'poniżej'} ${price}USD` });
+                    webpush.sendNotification(subscription, payload).catch(err => console.error(err));
                 }
+                await pool.query('DELETE FROM alerts WHERE id = $1', [row.id])
             }
-        }
-        console.log(send)
-        if (send) {
-            const userid = row.userid
-            const resp = await pool.query('SELECT * FROM subscriptions WHERE userid = $1', [userid])
-            //todo: multiple subs
-            const subscription = resp.rows[0].sub
-            const payload = JSON.stringify({ title: 'Alert cenowy', body: `Cena kryptowaluty ${crypto} jest ${moreless === 'more' ? 'powyżej' : 'poniżej'} ${price}USD` });
-            webpush.sendNotification(subscription, payload).catch(err => console.error(err));
-            await pool.query('DELETE FROM alerts WHERE id = $1', [row.id])
         }
     }
     setTimeout(manageAlerts, alertTimeout)
@@ -295,5 +298,5 @@ app.get('/api/user/timestamps', checkJwt, async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server listening on ${PORT}`);
-    //setTimeout(manageAlerts, alertTimeout)
+    setTimeout(manageAlerts, alertTimeout)
 });
