@@ -57,6 +57,10 @@ const checkJwt = jwt({
 });
 
 const alertTimeout = 1000 * 60
+const cryptoCacheExpiration = 1000 * 60
+const stockCacheExpiration = 1000 * 60 * 5
+const stockDailyCacheExpiration = 1000 * 60 * 60 * 24
+
 async function manageAlerts() {
     console.log('querying alerts')
     const cryptos = await pool.query('SELECT DISTINCT crypto FROM alerts')
@@ -96,7 +100,7 @@ async function manageAlerts() {
                     webpush.sendNotification(subscription, payload).catch(err => {
                         console.error(err);
                         console.log(err.statusCode)
-                        if (err.statusCode === 410){
+                        if (err.statusCode === 410) {
                             pool.query('DELETE FROM subscriptions WHERE sub = $1', [s.sub])
                         }
                     });
@@ -108,14 +112,35 @@ async function manageAlerts() {
     setTimeout(manageAlerts, alertTimeout)
 }
 
+async function getCache(type, symbol, range, expiration) {
+    const ts = Date.now() - expiration
+    let resp = null
+    if (range === 'full') {
+        resp = await pool.query('SELECT * FROM cache WHERE type = $1 AND symbol = $2 AND timestamp >= $3 AND range = $4', [type, symbol, ts, range])
+    } else {
+        resp = await pool.query('SELECT * FROM cache WHERE type = $1 AND symbol = $2 AND timestamp >= $3', [type, symbol, ts])
+    }
+    if (resp.rows[0] == null) {
+        return null
+    }
+    console.log('Serving cached data')
+    return resp.rows[0].data
+}
+
 app.get("/api", (req, res) => {
     res.json({ message: "Hello!" });
 });
 
 app.get("/api/stock/intraday", async (req, res) => {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${req.query.name}&interval=5min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
-    const response = await fetch(url)
-    const json_response = await response.json()
+    let json_response = await getCache('stockintraday', req.query.name, req.query.outputsize, stockCacheExpiration)
+    if (json_response == null) {
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${req.query.name}&interval=5min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
+        const response = await fetch(url)
+        json_response = await response.json()
+        const date = +new Date(Date.parse(json_response["Meta Data"]["3. Last Refreshed"] + "-0400"))
+        await pool.query('INSERT INTO cache(type, symbol, range, timestamp, data) VALUES($1, $2, $3, $4, $5) ON CONFLICT(type, symbol, range) DO UPDATE SET timestamp = EXCLUDED.timestamp, data = EXCLUDED.data',
+            ['stockintraday', req.query.name, req.query.outputsize, date, json_response])
+    }
     if (req.query.timestamp !== '0') {
         let date = new Date(parseInt(req.query.timestamp))
         let filtered = Object.fromEntries(Object.entries(json_response["Time Series (5min)"]).filter(([k, v]) => new Date(k + "+0000") > date))
@@ -125,9 +150,15 @@ app.get("/api/stock/intraday", async (req, res) => {
 });
 
 app.get("/api/stock/daily", async (req, res) => {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${req.query.name}&interval=5min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
-    const response = await fetch(url)
-    const json_response = await response.json()
+    let json_response = await getCache('stockdaily', req.query.name, req.query.outputsize, stockDailyCacheExpiration)
+    if (json_response == null) {
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${req.query.name}&interval=5min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
+        const response = await fetch(url)
+        json_response = await response.json()
+        const date = +new Date(Date.parse(json_response["Meta Data"]["3. Last Refreshed"]))
+        await pool.query('INSERT INTO cache(type, symbol, range, timestamp, data) VALUES($1, $2, $3, $4, $5) ON CONFLICT(type, symbol, range) DO UPDATE SET timestamp = EXCLUDED.timestamp, data = EXCLUDED.data',
+            ['stockdaily', req.query.name, req.query.outputsize, date, json_response])
+    }
     if (req.query.timestamp !== '0') {
         let date = new Date(parseInt(req.query.timestamp))
         let filtered = Object.fromEntries(Object.entries(json_response["Time Series (Daily)"]).filter(([k, v]) => new Date(k + "+0000") > date))
@@ -151,9 +182,15 @@ app.get("/api/stock/info", async (req, res) => {
 });
 
 app.get("/api/crypto/intraday", async (req, res) => {
-    const url = `https://www.alphavantage.co/query?function=CRYPTO_INTRADAY&symbol=${req.query.name}&market=USD&interval=1min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
-    const response = await fetch(url)
-    let json_response = await response.json()
+    let json_response = await getCache('crypto', req.query.name, req.query.outputsize, cryptoCacheExpiration)
+    if (json_response == null) {
+        const url = `https://www.alphavantage.co/query?function=CRYPTO_INTRADAY&symbol=${req.query.name}&market=USD&interval=1min&outputsize=${req.query.outputsize}&apikey=${API_KEY}`
+        const response = await fetch(url)
+        json_response = await response.json()
+        const date = +new Date(Date.parse(json_response["Meta Data"]["6. Last Refreshed"] + "+0000"))
+        await pool.query('INSERT INTO cache(type, symbol, range, timestamp, data) VALUES($1, $2, $3, $4, $5) ON CONFLICT(type, symbol, range) DO UPDATE SET timestamp = EXCLUDED.timestamp, data = EXCLUDED.data',
+            ['crypto', req.query.name, req.query.outputsize, date, json_response])
+    }
     if (req.query.timestamp !== '0') {
         let date = new Date(parseInt(req.query.timestamp))
         let filtered = Object.fromEntries(Object.entries(json_response["Time Series Crypto (1min)"]).filter(([k, v]) => new Date(k + "+0000") > date))

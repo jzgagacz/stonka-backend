@@ -52,6 +52,17 @@ function createdb(pool) {
         settings BIGINT
     );`
     executequery(pool, q, []);
+
+    q = `
+    CREATE TABLE IF NOT EXISTS cache (
+	    type VARCHAR(32) NOT NULL,
+        symbol VARCHAR(8) NOT NULL,
+        range VARCHAR(8) NOT NULL,
+        timestamp BIGINT NOT NULL,
+        data JSONB NOT NULL,
+        PRIMARY KEY (type, symbol, range)
+    );`
+    executequery(pool, q, []);
 }
 
 module.exports = createdb;
