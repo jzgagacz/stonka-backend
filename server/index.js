@@ -97,7 +97,7 @@ async function manageAlerts() {
                         console.error(err);
                         console.log(err.statusCode)
                         if (err.statusCode === 410){
-                            await pool.query('DELETE FROM subscriptions WHERE sub = $1', [s.sub])
+                            pool.query('DELETE FROM subscriptions WHERE sub = $1', [s.sub])
                         }
                     });
                 }
