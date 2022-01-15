@@ -30,7 +30,7 @@ if (DB_SSL === 'true') {
         rejectUnauthorized: false
     }
 }
-console.log(dbconfig)
+
 const pool = new Pool(
     dbconfig
 )
@@ -93,7 +93,13 @@ async function manageAlerts() {
                 for (const s of resp.rows) {
                     const subscription = s.sub
                     const payload = JSON.stringify({ title: 'Alert cenowy', body: `Cena kryptowaluty ${crypto} jest ${moreless === 'more' ? 'powyżej' : 'poniżej'} ${price}USD` });
-                    webpush.sendNotification(subscription, payload).catch(err => console.error(err));
+                    webpush.sendNotification(subscription, payload).catch(err => {
+                        console.error(err);
+                        console.log(err.statusCode)
+                        if (err.statusCode === 410){
+                            await pool.query('DELETE FROM subscriptions WHERE sub = $1', [s.sub])
+                        }
+                    });
                 }
                 await pool.query('DELETE FROM alerts WHERE id = $1', [row.id])
             }
