@@ -66,7 +66,7 @@ async function manageAlerts() {
         const response = await fetch(url)
         const data = await response.json()
 
-        const alerts = await pool.query('SELECT * FROM alerts WHERE crypto = $1')
+        const alerts = await pool.query('SELECT * FROM alerts WHERE crypto = $1', [crypto])
         for (const row of alerts.rows) {
             const price = row.price
             const moreless = row.moreless
