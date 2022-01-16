@@ -75,6 +75,7 @@ async function manageAlerts() {
             const price = row.price
             const moreless = row.moreless
             const date = row.date
+            const alertid = row.id
             let send = false
             if (moreless === "more") {
                 for (const t in data["Time Series Crypto (1min)"]) {
@@ -96,7 +97,7 @@ async function manageAlerts() {
                 const resp = await pool.query('SELECT * FROM subscriptions WHERE userid = $1', [userid])
                 for (const s of resp.rows) {
                     const subscription = s.sub
-                    const payload = JSON.stringify({ title: 'Alert cenowy', body: `Cena kryptowaluty ${crypto} jest ${moreless === 'more' ? 'powyżej' : 'poniżej'} ${price}USD` });
+                    const payload = JSON.stringify({ alertid: alertid, title: 'Alert cenowy', body: `Cena kryptowaluty ${crypto} jest ${moreless === 'more' ? 'powyżej' : 'poniżej'} ${price}USD` });
                     webpush.sendNotification(subscription, payload).catch(err => {
                         console.error(err);
                         console.log(err.statusCode)
