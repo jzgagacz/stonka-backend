@@ -59,7 +59,7 @@ function createdb(pool) {
         symbol VARCHAR(8) NOT NULL,
         range VARCHAR(8) NOT NULL,
         timestamp BIGINT NOT NULL,
-        data JSONB NOT NULL,
+        data JSON NOT NULL,
         PRIMARY KEY (type, symbol, range)
     );`
     executequery(pool, q, []);
